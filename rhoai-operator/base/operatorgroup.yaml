@@ -3,6 +3,4 @@ kind: OperatorGroup
 metadata:
   name: rhoai-operatorgroup
   namespace: redhat-ods-operator
-spec:
-  targetNamespaces:
-  - redhat-ods-operator
+spec: {}

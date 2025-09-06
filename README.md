@@ -171,10 +171,5 @@ oc get nodes -o json | jq '.items[].status.allocatable | select(."nvidia.com/gpu
 4. **Configure monitoring** and logging
 5. **Set up CI/CD pipelines** for ML workflows
 
-## **Support**
-
-For issues specific to this deployment:
-- Check the troubleshooting section above
-- Review OpenShift AI documentation
-- Verify GPU node configuration
-- Ensure all prerequisites are met
+# Unstall all the deployed operator
+To uninstall and clean up all the operators use script uninstall-operators.sh

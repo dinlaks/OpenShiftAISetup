@@ -1,8 +1,0 @@
-apiVersion: operators.coreos.com/v1
-kind: OperatorGroup
-metadata:
-  name: servicemesh-operatorgroup
-  namespace: openshift-operators
-spec:
-  targetNamespaces:
-  - openshift-operators

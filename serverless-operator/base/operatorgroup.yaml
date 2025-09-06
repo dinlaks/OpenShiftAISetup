@@ -4,5 +4,4 @@ metadata:
   name: serverless-operatorgroup
   namespace: openshift-serverless
 spec:
-  targetNamespaces:
-  - openshift-serverless
+  upgradeStrategy: Default
