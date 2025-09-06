@@ -1,41 +1,180 @@
-# OpenShift AI deployment plan
+# OpenShift AI (RHOAI) Deployment Guide
 
-This directory contains the GitOps configuration for deploying OpenShift AI operators in the correct dependency order.
+This directory contains the GitOps configuration for deploying OpenShift AI operators in the correct dependency order with automated CRD deployment and status verification.
 
-## **NOTE**: 
-### This is currently only aaplicable for OCP 4.19 and RHOAI 2.22.1. If you want to use it for any other versions of OCP make sure to update nfd and nvidia operator overlay files. In future I will try to parmeterize it when NFD and Nvidia operators are stable with OCP versions.
+## **Prerequisites**
 
-## Operator Deployment Order
+### **Required Infrastructure**
+- **OpenShift 4.19 cluster** (tested and verified)
+- **OC CLI tool** installed and configured
+- **GPU-enabled nodes** (NVIDIA GPUs recommended for SLM/LLM workloads)
+- **Cluster admin privileges** for operator installation
+- **Internet connectivity** for operator image pulls
 
-1. **NFD Operator** - Node Feature Discovery (openshift-nfd namespace)
-2. **NVIDIA Operator** - GPU Operator (nvidia-gpu-operator namespace)
-3. **OpenShift Serverless Operator** (openshift-serverless namespace)
-4. **OpenShift ServiceMesh Operator** (openshift-operators namespace)
-5. **Authorino Operator** (openshift-operators namespace)
-6. **RHOAI Operator** (redhat-ods-operator namespace)
+### **System Requirements**
+- **Minimum 3 worker nodes** (recommended for production)
+- **GPU nodes** with NVIDIA drivers (for ML/AI workloads)
+- **Sufficient resources** for operator pods and workloads
+- **Storage** for model storage and data persistence
 
-## Directory Structure
+## **Version Compatibility**
+> **⚠️ IMPORTANT**: This configuration is specifically tested for:
+> - **OpenShift Container Platform 4.19**
+> - **RHOAI 2.22.1**
+> 
+> For other OCP versions, update the NFD and NVIDIA operator overlay files accordingly.
 
-Each operator has its own directory with the following structure:
+## **Quick Start**
+
+### **1. Clone and Navigate**
+```bash
+git clone https://github.com/ravisharma5/OpenShiftAISetup
+cd OpenShiftAISetup
 ```
-operator-name/
-├── base/
-│   ├── namespace.yaml
-│   ├── operatorgroup.yaml
-│   └── subscription.yaml
-└── overlays/
-    └── crds/
-        └── (operator-specific CRDs)
+
+### **2. Verify Prerequisites**
+```bash
+# Check OC CLI
+oc version
+
+# Verify cluster access
+oc get nodes
+
+# Check for GPU nodes (optional)
+oc get nodes -l node-role.kubernetes.io/worker
 ```
 
-## Deployment Instructions
+### **3. Deploy All Operators**
+```bash
+# Make script executable
+chmod +x deploy-operators.sh
 
-1. Apply operators in dependency order using `OC apply -k` or your preferred GitOps tool
-2. Wait for each operator to be ready before proceeding to the next
-3. Apply CRDs from the overlays directory after the operator is ready
+# Run the deployment script
+./deploy-operators.sh
+```
 
-## Notes
+## **Deployment Process**
 
-- NFD and NVIDIA operators must be installed first as they provide infrastructure capabilities
-- ServiceMesh and Authorino operators share the openshift-operators namespace
-- RHOAI operator requires all previous operators to be ready
+The `deploy-operators.sh` script automatically handles the complete deployment process:
+
+### **Phase 1: Infrastructure Operators**
+1. **NFD Operator** - Node Feature Discovery
+   - Deploys operator
+   - Applies NFD instance CRD
+   - Waits for `Status: Available`
+
+2. **NVIDIA GPU Operator** - GPU management
+   - Deploys operator
+   - Applies ClusterPolicy CRD
+   - Waits for `state: ready`
+
+### **Phase 2: Platform Operators**
+3. **OpenShift Serverless Operator** - Knative serving
+4. **OpenShift ServiceMesh Operator** - Service mesh
+5. **Authorino Operator** - Authentication/Authorization
+
+### **Phase 3: AI Platform**
+6. **RHOAI Operator** - OpenShift AI platform
+   - Deploys operator
+   - Applies DataScienceCluster CRD
+   - Waits for `Status: Ready`
+
+## **Manual Deployment (Alternative)**
+
+If you prefer manual deployment:
+
+```bash
+# Deploy operators in order
+oc apply -k nfd-operator/base/
+oc apply -k nvidia-operator/base/
+oc apply -k serverless-operator/base/
+oc apply -k servicemesh-operator/base/
+oc apply -k authorino-operator/base/
+oc apply -k rhoai-operator/base/
+
+# Apply CRDs after operators are ready
+oc apply -k nfd-operator/overlays/crds/
+oc apply -k nvidia-operator/overlays/crds/
+oc apply -k rhoai-operator/overlays/crds/
+```
+
+## **Directory Structure**
+
+```
+OpenShiftAISetup/
+├── deploy-operators.sh          # Automated deployment script
+├── README.md                    # This file
+├── authorino-operator/
+├── nfd-operator/
+├── nvidia-operator/
+├── rhoai-operator/
+├── serverless-operator/
+└── servicemesh-operator/
+    ├── base/                    # Operator subscriptions
+    └── overlays/crds/           # Custom Resource Definitions
+```
+
+## **Verification**
+
+After deployment, verify all components:
+
+```bash
+# Check operator pods
+oc get pods -n openshift-nfd
+oc get pods -n nvidia-gpu-operator
+oc get pods -n redhat-ods-operator
+
+# Check CRDs
+oc get nfd-instance -n openshift-nfd
+oc get clusterpolicy
+oc get datasciencecluster
+
+# Check GPU resources
+oc describe nodes | grep nvidia.com/gpu
+```
+
+## **Accessing OpenShift AI**
+
+1. **Get the dashboard URL**:
+   ```bash
+   oc get route -n redhat-ods-applications
+   ```
+
+2. **Login with OpenShift credentials**
+3. **Start using Jupyter notebooks, model serving, and ML pipelines**
+
+## **Troubleshooting**
+
+### **Common Issues**
+- **GPU not detected**: Ensure NFD instance is `Available` and GPU nodes are labeled
+- **Operators not ready**: Check resource limits and node capacity
+- **CRDs not applied**: Verify operator pods are running before applying overlays
+
+### **Useful Commands**
+```bash
+# Check operator status
+oc get csv -n openshift-nfd
+oc get csv -n nvidia-gpu-operator
+
+# View operator logs
+oc logs -n openshift-nfd deployment/nfd-operator
+
+# Check GPU resources
+oc get nodes -o json | jq '.items[].status.allocatable | select(."nvidia.com/gpu")'
+```
+
+## **Next Steps**
+
+1. **Configure authentication** (htpasswd, LDAP, etc.)
+2. **Set up storage classes** for model storage
+3. **Deploy your first ML model** using KServe or ModelMesh
+4. **Configure monitoring** and logging
+5. **Set up CI/CD pipelines** for ML workflows
+
+## **Support**
+
+For issues specific to this deployment:
+- Check the troubleshooting section above
+- Review OpenShift AI documentation
+- Verify GPU node configuration
+- Ensure all prerequisites are met
