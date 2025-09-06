@@ -2,7 +2,8 @@
 
 This directory contains the GitOps configuration for deploying OpenShift AI operators in the correct dependency order.
 
-## **NOTE**: This is currently only aaplicable for OCP 4.19 and RHOAI 2.22.1. If you want to use it for any other versions of OCP make sure to update nfd and nvidia operator overlay files. In future I will try to parmeterize it when NFD and Nvidia operators are stable with OCP versions.
+## **NOTE**: 
+### This is currently only aaplicable for OCP 4.19 and RHOAI 2.22.1. If you want to use it for any other versions of OCP make sure to update nfd and nvidia operator overlay files. In future I will try to parmeterize it when NFD and Nvidia operators are stable with OCP versions.
 
 ## Operator Deployment Order
 
