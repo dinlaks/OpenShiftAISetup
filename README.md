@@ -171,5 +171,5 @@ oc get nodes -o json | jq '.items[].status.allocatable | select(."nvidia.com/gpu
 4. **Configure monitoring** and logging
 5. **Set up CI/CD pipelines** for ML workflows
 
-# Unstall all the deployed operator
-To uninstall and clean up all the operators use script uninstall-operators.sh
+# Uninstall all the deployed operators
+To uninstall and clean up all the operators, use the script uninstall-operators.sh
