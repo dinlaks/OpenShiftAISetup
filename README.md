@@ -17,6 +17,9 @@ This directory contains the GitOps configuration for deploying OpenShift AI oper
 - **Sufficient resources** for operator pods and workloads
 - **Storage** for model storage and data persistence
 
+### **GPU Spot Instance Price Script**
+- ** Once OCP cluster and AI is installed, we can use this gpu-config.sh to find the best price and helps to create a machine. 
+
 ## **Version Compatibility**
 > **⚠️ IMPORTANT**: This configuration is specifically tested for:
 > - **OpenShift Container Platform 4.19**
