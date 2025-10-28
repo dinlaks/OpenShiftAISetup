@@ -27,9 +27,11 @@ fi
 # Function to display instance type options and find the cheapest
 show_instance_types() {
     echo "Available GPU Instance Types (Region: $REGION, Zone: $ZONE):"
-    echo "--------------------------------------------------------------------------------------------------------------------"
-    printf "%-4s %-15s %-55s %-15s\n" "ID" "Instance Type" "Description" "Spot Price"
-    echo "--------------------------------------------------------------------------------------------------------------------"
+    # Adjusted separator length to accommodate wider Description column
+    echo "--------------------------------------------------------------------------------------------------------------------------"
+    # Widened Description column from 55 to 70 characters
+    printf "%-4s %-15s %-70s %-15s\n" "ID" "Instance Type" "Description" "Spot Price"
+    echo "--------------------------------------------------------------------------------------------------------------------------"
 
     declare -a prices
     print_instance_info() {
@@ -39,7 +41,8 @@ show_instance_types() {
         # Fetch the spot price using the utility. Grep and Tail ensure only the price value is captured.
         local price=$(spotprice -inst $type -reg $REGION -az $ZONE | grep -o '[0-9\\.]*' | tail -n 1)
         prices[$id]=$price
-        printf "%-4s %-15s %-55s \$%s/hour\n" "$id)" "$type" "$desc" "$price"
+        # Widened Description column from 55 to 70 characters
+        printf "%-4s %-15s %-70s \$%s/hour\n" "$id)" "$type" "$desc" "$price"
     }
 
     # --- EXPANDED GPU INSTANCE LIST (Ordered by general cost/power) ---
@@ -53,7 +56,7 @@ show_instance_types() {
     print_instance_info 8 g5.xlarge     "1 A10G GPU (24GB), 4 vCPUs, 16 GB RAM (Lowest Cost A10G)"
     print_instance_info 9 g4dn.xlarge   "1 T4 GPU (16GB), 4 vCPUs, 16 GB RAM (Lowest Cost T4)"
     print_instance_info 10 g4ad.xlarge  "1 AMD Radeon Pro V520, 4 vCPUs, 16 GB RAM (AMD Graphics Option)"
-    echo "--------------------------------------------------------------------------------------------------------------------"
+    echo "--------------------------------------------------------------------------------------------------------------------------"
 
     # --- Cheapest Price Calculation ---
     local cheapest_id=0
