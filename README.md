@@ -31,7 +31,7 @@ This directory contains the GitOps configuration for deploying OpenShift AI oper
 
 ### **1. Clone and Navigate**
 ```bash
-git clone https://github.com/ravisharma5/OpenShiftAISetup
+git clone [https://github.com/ravisharma5/OpenShiftAISetup](https://github.com/dinlaks/OpenShiftAISetup.git)
 cd OpenShiftAISetup
 ```
 
