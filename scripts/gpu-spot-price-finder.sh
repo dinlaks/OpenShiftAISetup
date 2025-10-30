@@ -1,35 +1,71 @@
 #!/bin/sh
 
 # This script finds the current cheapest spot price for various AWS GPU instances
-# in the us-east-2 region (Ohio) and prepares a machineset YAML file for OpenShift.
+# based on user input for the AWS region and prepares a machineset YAML file for OpenShift.
 
 # --- Configuration ---
-NUM_GPU_OPTIONS=13 # UPDATED: Now supports 13 GPU options
-DEFAULT_CHOICE=7 # Set default to a reasonable mid-range single L4 GPU instance
+NUM_GPU_OPTIONS=13 # Supports 13 GPU options
+DEFAULT_CHOICE=7 # Default instance choice
+DEFAULT_PROFILE="default" 
+DEFAULT_REGION_PROMPT="us-east-1" # Suggest a common region
 
-# Check for AWS credentials
-if ! aws sts get-caller-identity > /dev/null 2>&1; then
-    echo "AWS credentials not configured. Please run 'aws configure' and follow the prompts."
-    aws configure
+# 1. PROFILE SELECTION AND EXPORT
+# ---
+
+echo "--- AWS Profile and Region Configuration ---"
+
+# Ask for the AWS Profile
+echo -n "Enter the AWS profile name to use for Spot Price lookup (e.g., 'spot-finder') [$DEFAULT_PROFILE]: "
+read USER_PROFILE_CHOICE
+
+if [ -z "$USER_PROFILE_CHOICE" ]; then
+    SPOT_PROFILE="$DEFAULT_PROFILE"
+else
+    SPOT_PROFILE="$USER_PROFILE_CHOICE"
 fi
 
-# Get cluster region and availability zone
-# Note: This assumes the script is run from a worker node or has 'oc' access configured.
-REGION=$(oc get nodes -o jsonpath='{.items[0].metadata.labels.topology\.kubernetes\.io/region}')
-ZONE=$(oc get nodes -o jsonpath='{.items[0].metadata.labels.topology\.kubernetes\.io/zone}')
+export AWS_PROFILE="$SPOT_PROFILE"
+echo "Using AWS Profile: $AWS_PROFILE"
 
-# Verify region is us-east-2, otherwise exit
-if [ "$REGION" != "us-east-2" ]; then
-    echo "Error: This script is configured for 'us-east-2' (Ohio), but your cluster is in $REGION."
+# Check credentials using the specified profile
+if ! aws sts get-caller-identity --profile "$SPOT_PROFILE" > /dev/null 2>&1; then
+    echo "Error: AWS credentials for profile '$SPOT_PROFILE' are not configured or invalid."
     exit 1
 fi
 
+# 2. TARGET REGION INPUT
+# ---
+
+# Ask the user for the target AWS region
+echo -n "Enter the AWS Region for Spot Price lookup (e.g., 'us-east-2') [$DEFAULT_REGION_PROMPT]: "
+read USER_REGION_CHOICE
+
+if [ -z "$USER_REGION_CHOICE" ]; then
+    TARGET_REGION="$DEFAULT_REGION_PROMPT"
+else
+    TARGET_REGION="$USER_REGION_CHOICE"
+fi
+
+# 3. VERIFY CLUSTER REGION VS TARGET REGION
+# ---
+
+# Get cluster region and availability zone from a running node
+REGION=$(oc get nodes -o jsonpath='{.items[0].metadata.labels.topology\.kubernetes\.io/region}')
+ZONE=$(oc get nodes -o jsonpath='{.items[0].metadata.labels.topology\.kubernetes\.io/zone}')
+
+# Use the user-provided region for the lookup, but verify the cluster is nearby
+if [ "$REGION" != "$TARGET_REGION" ]; then
+    echo "Warning: Your OpenShift cluster is in $REGION, but the Spot Price lookup will use $TARGET_REGION."
+    echo "This may cause machine set creation failures if the region is wrong."
+fi
+
+# We use TARGET_REGION for the lookup, but keep original $ZONE and $REGION for validation
+LOOKUP_REGION="$TARGET_REGION"
+
 # Function to display instance type options and find the cheapest
 show_instance_types() {
-    echo "Available GPU Instance Types (Region: $REGION, Zone: $ZONE):"
-    # Adjusted separator length to accommodate wider Description column
+    echo "Available GPU Instance Types (Lookup Region: $LOOKUP_REGION, Zone: $ZONE):"
     echo "--------------------------------------------------------------------------------------------------------------------------"
-    # Widened Description column from 55 to 70 characters
     printf "%-4s %-15s %-70s %-15s\n" "ID" "Instance Type" "Description" "Spot Price"
     echo "--------------------------------------------------------------------------------------------------------------------------"
 
@@ -38,10 +74,9 @@ show_instance_types() {
         local id=$1
         local type=$2
         local desc=$3
-        # Fetch the spot price using the utility. Grep and Tail ensure only the price value is captured.
-        local price=$(spotprice -inst "$type" -reg "$REGION" -az "$ZONE" | grep -o '[0-9\\.]*' | tail -n 1)
+        # Use LOOKUP_REGION for spot price command
+        local price=$(spotprice -inst "$type" -reg "$LOOKUP_REGION" -az "$ZONE" | grep -o '[0-9\\.]*' | tail -n 1)
         prices[$id]=$price
-        # Widened Description column from 55 to 70 characters
         printf "%-4s %-15s %-70s \$%s/hour\n" "$id)" "$type" "$desc" "$price"
     }
 
@@ -61,11 +96,10 @@ show_instance_types() {
     print_instance_info 13 g4ad.xlarge    "1 AMD Radeon Pro V520, 4 vCPUs, 16 GB RAM (AMD Graphics Option)"
     echo "--------------------------------------------------------------------------------------------------------------------------"
 
-    # --- Cheapest Price Calculation ---
+    # --- Cheapest Price Calculation (Remains the same) ---
     local cheapest_id=0
     local cheapest_price=""
 
-    # Find the first available price to initialize comparison
     for i in $(seq 1 $NUM_GPU_OPTIONS); do
         if [ -n "${prices[$i]}" ] && [ "${prices[$i]}" != "0" ]; then
             cheapest_id=$i
@@ -74,11 +108,9 @@ show_instance_types() {
         fi
     done
 
-    # If we found a price, loop through the rest to find the cheapest
     if [ "$cheapest_id" -ne 0 ]; then
         i=$(expr $cheapest_id + 1)
         while [ $i -le $NUM_GPU_OPTIONS ]; do
-            # Use 'bc' for floating-point comparison
             if [ -n "${prices[$i]}" ] && [ "$(echo "${prices[$i]} < $cheapest_price" | bc)" = "1" ]; then
                 cheapest_price=${prices[$i]}
                 cheapest_id=$i
@@ -87,7 +119,7 @@ show_instance_types() {
         done
         echo "Suggestion: The cheapest available instance is #$cheapest_id at \$${prices[$cheapest_id]}/hour."
     else
-        echo "Suggestion: No spot prices available or instance types not currently offered in $REGION/$ZONE."
+        echo "Suggestion: No spot prices available or instance types not currently offered in $LOOKUP_REGION/$ZONE."
     fi
     echo ""
 }
@@ -134,13 +166,10 @@ get_gpu_description() {
 
 # Function to get storage size based on instance type
 get_storage_size() {
-    # 1500GB for P4d (ID 1)
     if [ "$1" -eq 1 ]; then
         echo "1500"
-    # 1000GB for all multi-GPU or high-RAM single-GPU instances (IDs 2-9)
     elif [ "$1" -ge 2 ] && [ "$1" -le 9 ]; then
         echo "1000"
-    # 500GB for lower-end inference/single-GPU types (IDs 10-13)
     else
         echo "500"
     fi
@@ -182,7 +211,7 @@ MS_NAME=$(oc get machinesets -n openshift-machine-api | grep "${ZONE}" | head -n
 
 if [ -z "$MS_NAME" ]; then
     echo "Error: Could not find a base machineset in zone $ZONE to use as a template."
-    echo "Please ensure there is a standard worker machineset available (e.g., 'aws-us-east-2a-worker')."
+    echo "Please ensure there is a standard worker machineset available (e.g., 'aws-$REGION-a-worker')."
     exit 1
 fi
 
@@ -204,15 +233,12 @@ echo "Changing to: $SELECTED_INSTANCE_TYPE"
 # --- Modify the machineset YAML ---
 
 # 1. Change the name of MS
-# Note: Using sed with -i.bak for portability, creating a backup file
 sed -i .bak "s/${MS_NAME}/${MS_NAME_GPU}/g" "$OUTPUT_FILENAME"
 
 # 2. Change instance type to selected GPU instance
 sed -i .bak "s/${INSTANCE_TYPE}/${SELECTED_INSTANCE_TYPE}/g" "$OUTPUT_FILENAME"
 
 # 3. Increase the instance volume based on instance type
-# IMPORTANT: This finds and replaces the volumeSize value in the machineset spec.
-# The volumeSize field is assumed to be an integer (e.g., 100) and is replaced by the calculated STORAGE_SIZE.
 sed -i .bak "s/volumeSize: [0-9]\{1,\}/volumeSize: ${STORAGE_SIZE}/g" "$OUTPUT_FILENAME"
 
 # 4. Set Replica as 1
