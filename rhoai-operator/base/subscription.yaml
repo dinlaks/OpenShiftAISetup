@@ -6,7 +6,7 @@ metadata:
   labels:
     operators.coreos.com/rhods-operator.redhat-ods-operator: ""
 spec:
-  channel: stable
+  channel: fast-3.x
   installPlanApproval: Automatic
   name: rhods-operator
   source: redhat-operators
